@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ExpiryMate</string>
+    <string name="tagline">Your Documents. Your Dates. Your Reminders.</string>
+
+    <string name="nav_home">Home</string>
+    <string name="nav_locker">Locker</string>
+    <string name="nav_add">Add</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="stat_documents">Total Documents</string>
+    <string name="stat_tracked">Expiry Items</string>
+    <string name="stat_soon">Expiring Soon</string>
+    <string name="stat_expired">Expired</string>
+    <string name="stat_warranties">Active Warranties</string>
+    <string name="stat_reminders">Upcoming Reminders</string>
+
+    <string name="section_expiring_soon">Expiring Soon</string>
+    <string name="section_today">Today\'s Reminders</string>
+    <string name="section_quick">Quick Actions</string>
+
+    <string name="empty_expiring">Nothing is expiring in the next 30 days.</string>
+    <string name="empty_today">No reminders for today.</string>
+
+    <string name="action_add_document">Add Document</string>
+    <string name="action_add_expiry">Add Expiry Item</string>
+    <string name="action_scan">Scan Document</string>
+    <string name="action_reminder">Create Reminder</string>
+
+    <string name="coming_soon">This screen will be built in the next phase.</string>
+    <string name="close">Close</string>
+</resources>
