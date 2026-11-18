@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ExpiryMate</string>
+    <string name="tagline">आपके दस्तावेज़। आपकी तारीखें। आपके रिमाइंडर।</string>
+
+    <string name="nav_home">होम</string>
+    <string name="nav_locker">लॉकर</string>
+    <string name="nav_add">जोड़ें</string>
+    <string name="nav_calendar">कैलेंडर</string>
+    <string name="nav_settings">सेटिंग्स</string>
+
+    <string name="stat_documents">कुल दस्तावेज़</string>
+    <string name="stat_tracked">एक्सपायरी आइटम</string>
+    <string name="stat_soon">जल्द समाप्त</string>
+    <string name="stat_expired">समाप्त हो चुके</string>
+    <string name="stat_warranties">चालू वारंटी</string>
+    <string name="stat_reminders">आने वाले रिमाइंडर</string>
+
+    <string name="section_expiring_soon">जल्द समाप्त होने वाले</string>
+    <string name="section_today">आज के रिमाइंडर</string>
+    <string name="section_quick">त्वरित कार्य</string>
+
+    <string name="empty_expiring">अगले 30 दिनों में कुछ भी समाप्त नहीं हो रहा।</string>
+    <string name="empty_today">आज के लिए कोई रिमाइंडर नहीं।</string>
+
+    <string name="action_add_document">दस्तावेज़ जोड़ें</string>
+    <string name="action_add_expiry">एक्सपायरी आइटम जोड़ें</string>
+    <string name="action_scan">दस्तावेज़ स्कैन करें</string>
+    <string name="action_reminder">रिमाइंडर बनाएँ</string>
+
+    <string name="coming_soon">यह स्क्रीन अगले चरण में बनाई जाएगी।</string>
+    <string name="close">बंद करें</string>
+</resources>
