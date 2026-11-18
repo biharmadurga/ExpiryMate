@@ -3,17 +3,11 @@ package com.expirymate.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -21,40 +15,34 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.expirymate.app.data.AppDatabase
+import com.expirymate.app.data.ExpiryItem
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import kotlinx.coroutines.launch
 
 private val Emerald = Color(0xFF059669)
 private val Amber = Color(0xFFD97706)
 private val ExpiredRed = Color(0xFFDC2626)
 private val Charcoal = Color(0xFF1F2933)
 private val OffWhite = Color(0xFFFAFAF7)
+
+private const val DAY = 86_400_000L
+private val CATEGORIES = listOf("Food", "Document", "Warranty", "Vehicle", "Other")
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,11 +71,31 @@ fun ExpiryMateTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = colors, content = content)
 }
 
+fun todayUtcMillis(): Long {
+    val local = Calendar.getInstance()
+    val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    utc.clear()
+    utc.set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
+    return utc.timeInMillis
+}
+
+fun formatDate(millis: Long): String {
+    val f = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    f.timeZone = TimeZone.getTimeZone("UTC")
+    return f.format(Date(millis))
+}
+
 data class NavItem(val label: Int, val icon: ImageVector)
 
 @Composable
 fun AppRoot() {
-    val items = listOf(
+    val context = LocalContext.current
+    val dao = remember { AppDatabase.get(context).expiryDao() }
+    val itemsFlow = remember { dao.getAll() }
+    val list by itemsFlow.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+
+    val navItems = listOf(
         NavItem(R.string.nav_home, Icons.Filled.Home),
         NavItem(R.string.nav_locker, Icons.Filled.Lock),
         NavItem(R.string.nav_add, Icons.Filled.Add),
@@ -96,12 +104,13 @@ fun AppRoot() {
     )
     var selected by remember { mutableIntStateOf(0) }
     var showAddMenu by remember { mutableStateOf(false) }
+    var showForm by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                items.forEachIndexed { index, item ->
+                navItems.forEachIndexed { index, item ->
                     NavigationBarItem(
                         selected = selected == index,
                         onClick = {
@@ -121,9 +130,13 @@ fun AppRoot() {
             color = MaterialTheme.colorScheme.background
         ) {
             if (selected == 0) {
-                DashboardScreen()
+                DashboardScreen(
+                    list = list,
+                    onAdd = { showForm = true },
+                    onDelete = { item -> scope.launch { dao.delete(item) } }
+                )
             } else {
-                PlaceholderScreen(stringResource(items[selected].label))
+                PlaceholderScreen(stringResource(navItems[selected].label))
             }
         }
     }
@@ -135,7 +148,7 @@ fun AppRoot() {
             text = {
                 Column {
                     TextButton(onClick = { showAddMenu = false }) { Text(stringResource(R.string.action_add_document)) }
-                    TextButton(onClick = { showAddMenu = false }) { Text(stringResource(R.string.action_add_expiry)) }
+                    TextButton(onClick = { showAddMenu = false; showForm = true }) { Text(stringResource(R.string.action_add_expiry)) }
                     TextButton(onClick = { showAddMenu = false }) { Text(stringResource(R.string.action_scan)) }
                     TextButton(onClick = { showAddMenu = false }) { Text(stringResource(R.string.action_reminder)) }
                 }
@@ -145,10 +158,98 @@ fun AppRoot() {
             }
         )
     }
+
+    if (showForm) {
+        AddItemDialog(
+            onDismiss = { showForm = false },
+            onSave = { name, category, millis ->
+                scope.launch {
+                    dao.insert(ExpiryItem(name = name, category = category, expiryMillis = millis))
+                }
+                showForm = false
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddItemDialog(onDismiss: () -> Unit, onSave: (String, String, Long) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf(CATEGORIES[0]) }
+    var dateMillis by remember { mutableStateOf<Long?>(null) }
+    var showPicker by remember { mutableStateOf(false) }
+    val pickerState = rememberDatePickerState()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.action_add_expiry)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Item name") },
+                    singleLine = true
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CATEGORIES.forEach { c ->
+                        FilterChip(
+                            selected = category == c,
+                            onClick = { category = c },
+                            label = { Text(c) }
+                        )
+                    }
+                }
+                OutlinedButton(onClick = { showPicker = true }) {
+                    Text(dateMillis?.let { formatDate(it) } ?: "Select expiry date")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank() && dateMillis != null,
+                onClick = { dateMillis?.let { onSave(name.trim(), category, it) } }
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+
+    if (showPicker) {
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dateMillis = pickerState.selectedDateMillis
+                    showPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
 }
 
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(
+    list: List<ExpiryItem>,
+    onAdd: () -> Unit,
+    onDelete: (ExpiryItem) -> Unit
+) {
+    val today = todayUtcMillis()
+    val limit = today + 30 * DAY
+    val soonItems = list.filter { it.expiryMillis in today..limit }
+    val expiredCount = list.count { it.expiryMillis < today }
+    val warrantyCount = list.count { it.category == "Warranty" && it.expiryMillis >= today }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -166,27 +267,55 @@ fun DashboardScreen() {
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
             )
+            Text(
+                text = "Developed by Shubham Mishra",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard(Modifier.weight(1f), stringResource(R.string.stat_documents), "0", Emerald)
-                StatCard(Modifier.weight(1f), stringResource(R.string.stat_tracked), "0", Emerald)
+                StatCard(Modifier.weight(1f), stringResource(R.string.stat_tracked), list.size.toString(), Emerald)
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(Modifier.weight(1f), stringResource(R.string.stat_soon), "0", Amber)
-                StatCard(Modifier.weight(1f), stringResource(R.string.stat_expired), "0", ExpiredRed)
+                StatCard(Modifier.weight(1f), stringResource(R.string.stat_soon), soonItems.size.toString(), Amber)
+                StatCard(Modifier.weight(1f), stringResource(R.string.stat_expired), expiredCount.toString(), ExpiredRed)
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard(Modifier.weight(1f), stringResource(R.string.stat_warranties), "0", Emerald)
+                StatCard(Modifier.weight(1f), stringResource(R.string.stat_warranties), warrantyCount.toString(), Emerald)
                 StatCard(Modifier.weight(1f), stringResource(R.string.stat_reminders), "0", Emerald)
             }
         }
-        item { SectionCard(stringResource(R.string.section_expiring_soon), stringResource(R.string.empty_expiring)) }
-        item { SectionCard(stringResource(R.string.section_today), stringResource(R.string.empty_today)) }
+        item {
+            SectionCard(
+                title = stringResource(R.string.section_expiring_soon),
+                emptyText = stringResource(R.string.empty_expiring),
+                rows = soonItems,
+                today = today,
+                onDelete = onDelete
+            )
+        }
+        item {
+            SectionCard(
+                title = stringResource(R.string.section_today),
+                emptyText = stringResource(R.string.empty_today)
+            )
+        }
+        item {
+            SectionCard(
+                title = "All Items",
+                emptyText = "No items yet. Tap Add Expiry Item to create one.",
+                rows = list,
+                today = today,
+                onDelete = onDelete
+            )
+        }
         item {
             Text(
                 text = stringResource(R.string.section_quick),
@@ -198,7 +327,7 @@ fun DashboardScreen() {
                 FilledTonalButton(onClick = { }, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.action_add_document), fontSize = 12.sp)
                 }
-                FilledTonalButton(onClick = { }, modifier = Modifier.weight(1f)) {
+                FilledTonalButton(onClick = onAdd, modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.action_add_expiry), fontSize = 12.sp)
                 }
             }
@@ -231,7 +360,13 @@ fun StatCard(modifier: Modifier, label: String, value: String, accent: Color) {
 }
 
 @Composable
-fun SectionCard(title: String, emptyText: String) {
+fun SectionCard(
+    title: String,
+    emptyText: String,
+    rows: List<ExpiryItem> = emptyList(),
+    today: Long = 0L,
+    onDelete: (ExpiryItem) -> Unit = {}
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -241,12 +376,49 @@ fun SectionCard(title: String, emptyText: String) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
-            Text(
-                text = emptyText,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
+            if (rows.isEmpty()) {
+                Text(
+                    text = emptyText,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            } else {
+                rows.forEach { item ->
+                    ItemRow(item = item, today = today, onDelete = { onDelete(item) })
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun ItemRow(item: ExpiryItem, today: Long, onDelete: () -> Unit) {
+    val days = ((item.expiryMillis - today) / DAY).toInt()
+    val status = when {
+        days < 0 -> "Expired ${-days} days ago"
+        days == 0 -> "Expires today"
+        else -> "$days days left"
+    }
+    val statusColor = when {
+        days < 0 -> ExpiredRed
+        days <= 30 -> Amber
+        else -> Emerald
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = item.name, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = item.category + " • " + formatDate(item.expiryMillis),
+                fontSize = 12.sp
+            )
+            Text(text = status, fontSize = 12.sp, color = statusColor)
+        }
+        TextButton(onClick = onDelete) { Text("Delete") }
     }
 }
 
